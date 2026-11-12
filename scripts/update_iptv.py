@@ -1,87 +1,197 @@
 
 import json
-from datetime import datetime, timezone
+import os
+import sys
+import urllib.parse
+import urllib.request
+from datetime import datetime, timedelta
 from pathlib import Path
-from urllib.parse import urlparse
+from zoneinfo import ZoneInfo
 
 ROOT = Path(__file__).resolve().parents[1]
-
 FIXTURES_FILE = ROOT / "config" / "fixtures.json"
 STREAMS_FILE = ROOT / "config" / "streams.json"
 OUTPUT_FILE = ROOT / "Iptv_selected.m3u"
 
+API_URL = "https://v3.football.api-sports.io/fixtures"
+TIMEZONE = "Asia/Ho_Chi_Minh"
+
+# API-Football league IDs
+LEAGUES = {
+    39: "Premier League",
+    2: "Champions League",
+    140: "La Liga",
+    135: "Serie A",
+    78: "Bundesliga",
+    61: "Ligue 1",
+    340: "V.League 1"
+}
+
+LIVE_STATUSES = {
+    "1H", "HT", "2H", "ET", "BT", "P", "LIVE"
+}
+
+UPCOMING_STATUSES = {"NS", "TBD"}
+
+FINISHED_STATUSES = {
+    "FT", "AET", "PEN", "CANC", "ABD", "AWD", "WO"
+}
+
 
 def load_json(path):
-    with path.open("r", encoding="utf-8") as f:
-        return json.load(f)
+    with path.open("r", encoding="utf-8") as file:
+        return json.load(file)
 
 
-def valid_stream_url(url):
+def save_json(path, data):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(data, ensure_ascii=False, indent=2),
+        encoding="utf-8"
+    )
+
+
+def api_request(api_key):
+    now = datetime.now(ZoneInfo(TIMEZONE))
+    date_from = now.date()
+    date_to = (now + timedelta(days=7)).date()
+
+    params = urllib.parse.urlencode({
+        "from": date_from.isoformat(),
+        "to": date_to.isoformat(),
+        "timezone": TIMEZONE
+    })
+
+    request = urllib.request.Request(
+        f"{API_URL}?{params}",
+        headers={
+            "x-apisports-key": api_key,
+            "User-Agent": "my-iptv-personal-bot"
+        }
+    )
+
+    with urllib.request.urlopen(request, timeout=30) as response:
+        result = json.loads(response.read().decode("utf-8"))
+
+    errors = result.get("errors")
+    if errors:
+        raise RuntimeError(f"API error: {errors}")
+
+    return result.get("response", [])
+
+
+def valid_url(url):
     if not isinstance(url, str):
         return False
 
-    parsed = urlparse(url.strip())
+    parsed = urllib.parse.urlparse(url.strip())
     return parsed.scheme in ("http", "https") and bool(parsed.netloc)
 
 
 def main():
-    fixtures = load_json(FIXTURES_FILE)
-    streams_data = load_json(STREAMS_FILE)
+    api_key = os.environ.get("API_FOOTBALL_KEY")
 
-    matches = fixtures.get("matches", [])
-    streams = streams_data.get("streams", [])
+    if not api_key:
+        raise RuntimeError("Missing API_FOOTBALL_KEY secret")
+
+    print("Fetching football fixtures...")
+    api_fixtures = api_request(api_key)
+
+    try:
+        streams_data = load_json(STREAMS_FILE)
+    except FileNotFoundError:
+        streams_data = {"streams": []}
 
     stream_map = {
-        item["match_id"]: item["url"]
-        for item in streams
-        if item.get("match_id") and valid_stream_url(item.get("url"))
+        str(item["match_id"]): item["url"].strip()
+        for item in streams_data.get("streams", [])
+        if item.get("match_id") and valid_url(item.get("url"))
     }
 
-    now = datetime.now(timezone.utc)
-    output = ["#EXTM3U"]
-    count = 0
+    fixtures = []
+    playable = []
 
-    for match in matches:
-        match_id = match.get("id")
-        start = datetime.fromisoformat(
-            match["start_time"].replace("Z", "+00:00")
-        )
-        end = datetime.fromisoformat(
-            match["end_time"].replace("Z", "+00:00")
-        )
+    for item in api_fixtures:
+        fixture = item.get("fixture", {})
+        league = item.get("league", {})
+        teams = item.get("teams", {})
+        status = fixture.get("status", {}).get("short", "")
 
-        if end <= now:
+        league_id = league.get("id")
+
+        if league_id not in LEAGUES:
             continue
 
-        url = stream_map.get(match_id)
-
-        # M3U cần URL phát thực tế.
-        # Trận chưa có link sẽ không được đưa vào playlist.
-        if not url:
+        if status in FINISHED_STATUSES:
             continue
 
-        if start <= now < end:
-            group = "LIVE"
-        else:
-            group = "Sap dien ra"
+        if status not in LIVE_STATUSES | UPCOMING_STATUSES:
+            continue
 
-        home = match.get("home", "Unknown")
-        away = match.get("away", "Unknown")
+        fixture_id = str(fixture.get("id"))
+        kickoff = fixture.get("date")
+
+        home = teams.get("home", {}).get("name", "Unknown")
+        away = teams.get("away", {}).get("name", "Unknown")
+
+        match = {
+            "id": fixture_id,
+            "sport": "Football",
+            "league_id": league_id,
+            "league": LEAGUES[league_id],
+            "home": home,
+            "away": away,
+            "start_time": kickoff,
+            "status": status,
+            "elapsed": fixture.get("status", {}).get("elapsed")
+        }
+
+        fixtures.append(match)
+
+        stream_url = stream_map.get(fixture_id)
+
+        if not stream_url:
+            continue
+
+        if not valid_url(stream_url):
+            continue
+
+        group = "LIVE" if status in LIVE_STATUSES else "Sap dien ra"
+
         title = f"{home} vs {away}"
+        logo = teams.get("home", {}).get("logo", "")
 
-        output.append(
-            f'#EXTINF:-1 group-title="{group}",{title}'
+        extinf = (
+            f'#EXTINF:-1 tvg-id="{fixture_id}" '
+            f'tvg-logo="{logo}" group-title="{group}",{title}'
         )
-        output.append(url)
-        count += 1
+
+        playable.append((kickoff or "", extinf, stream_url))
+
+    fixtures.sort(key=lambda x: x.get("start_time", ""))
+    playable.sort(key=lambda x: x[0])
+
+    save_json(FIXTURES_FILE, {"matches": fixtures})
+
+    playlist = ["#EXTM3U"]
+
+    for _, extinf, url in playable:
+        playlist.append(extinf)
+        playlist.append(url)
 
     OUTPUT_FILE.write_text(
-        "\n".join(output) + "\n",
+        "\n".join(playlist) + "\n",
         encoding="utf-8"
     )
 
-    print(f"Playlist updated: {count} playable matches")
+    print(f"Fixtures found: {len(fixtures)}")
+    print(f"Playable matches: {len(playable)}")
+    print("Playlist updated successfully.")
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as error:
+        print(f"ERROR: {error}")
+        sys.exit(1)
