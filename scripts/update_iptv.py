@@ -51,33 +51,51 @@ def save_json(path, data):
     )
 
 
+
 def api_request(api_key):
     now = datetime.now(ZoneInfo(TIMEZONE))
     date_from = now.date()
     date_to = (now + timedelta(days=7)).date()
 
-    params = urllib.parse.urlencode({
-        "from": date_from.isoformat(),
-        "to": date_to.isoformat(),
-        "timezone": TIMEZONE
-    })
+    all_fixtures = []
 
-    request = urllib.request.Request(
-        f"{API_URL}?{params}",
-        headers={
-            "x-apisports-key": api_key,
-            "User-Agent": "my-iptv-personal-bot"
-        }
-    )
+    for league_id, league_name in LEAGUES.items():
+        params = urllib.parse.urlencode({
+            "league": league_id,
+            "season": now.year,
+            "from": date_from.isoformat(),
+            "to": date_to.isoformat(),
+            "timezone": TIMEZONE
+        })
 
-    with urllib.request.urlopen(request, timeout=30) as response:
-        result = json.loads(response.read().decode("utf-8"))
+        request = urllib.request.Request(
+            f"{API_URL}?{params}",
+            headers={
+                "x-apisports-key": api_key,
+                "User-Agent": "my-iptv-personal-bot"
+            }
+        )
 
-    errors = result.get("errors")
-    if errors:
-        raise RuntimeError(f"API error: {errors}")
+        print(f"Fetching {league_name}...")
 
-    return result.get("response", [])
+        with urllib.request.urlopen(request, timeout=30) as response:
+            result = json.loads(
+                response.read().decode("utf-8")
+            )
+
+        errors = result.get("errors")
+
+        if errors:
+            raise RuntimeError(
+                f"API error for {league_name}: {errors}"
+            )
+
+        fixtures = result.get("response", [])
+        all_fixtures.extend(fixtures)
+
+        print(f"{league_name}: {len(fixtures)} matches")
+
+    return all_fixtures
 
 
 def valid_url(url):
