@@ -24,7 +24,7 @@ jobs:
 
       - name: Update IPTV playlist
         env:
-          API_FOOTBALL_KEY: ${{ secrets.API_FOOTBALL_KEY }}
+          API_FOOTBALL_KEY: ${{ secrets.SPORTSTATS_API_KEY }}
         run: python scripts/update_iptv.py
 
       - name: Commit updated playlist
