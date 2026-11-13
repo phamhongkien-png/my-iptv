@@ -14,7 +14,7 @@ STREAMS_FILE = ROOT / "config" / "streams.json"
 OUTPUT_FILE = ROOT / "Iptv_selected.m3u"
 
 API_URL = "https://api.sportstatsapi.com/api/v1/soccer/matches"
-
+LEAGUES_URL = "https://api.sportstatsapi.com/api/v1/soccer/leagues"
 # Match league names returned by SportStatsAPI.
 LEAGUES = {
     "premier league": "Premier League",
@@ -123,6 +123,50 @@ def get_match_status(match):
 
 def main():
     api_key = os.environ.get("SPORTSTATS_API_KEY")
+
+    request = urllib.request.Request(
+        LEAGUES_URL,
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Accept": "application/json"
+        }
+    )
+
+    print("Fetching league catalogue...")
+
+    with urllib.request.urlopen(request, timeout=30) as response:
+        catalogue = json.loads(response.read().decode("utf-8"))
+
+    if not catalogue.get("success"):
+        raise RuntimeError(f"League catalogue error: {catalogue}")
+
+    keywords = [
+        "premier league",
+        "champions league",
+        "la liga",
+        "serie a",
+        "bundesliga",
+        "ligue 1",
+        "v.league",
+        "vietnam"
+    ]
+
+    print("----- TARGET LEAGUES -----")
+
+    for league in catalogue.get("data", []):
+        name = str(league.get("name") or "")
+        official = str(league.get("official_name") or "")
+        combined = (name + " " + official).lower()
+
+        if any(word in combined for word in keywords):
+            print({
+                "id": league.get("id"),
+                "name": name,
+                "official_name": official
+            })
+
+    print("----- END TARGET LEAGUES -----")
+    return
 
     if not api_key:
         raise RuntimeError("Missing SPORTSTATS_API_KEY GitHub Secret")
