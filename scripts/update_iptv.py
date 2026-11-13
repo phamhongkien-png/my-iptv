@@ -7,9 +7,15 @@ import urllib.request
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+API_URL = "https://api.sportstatsapi.com/api/v1/soccer/matches"
+
+LEAGUES_URL = "https://api.sportstatsapi.com/api/v1/soccer/leagues"
+
+VOLLEYBALL_LEAGUES_URL = "https://api.sportstatsapi.com/api/v1/volleyball/leagues"
+
+
 def main():
     api_key = os.environ.get("SPORTSTATS_API_KEY")
-
     if not api_key:
         raise RuntimeError("Missing SPORTSTATS_API_KEY GitHub Secret")
 
