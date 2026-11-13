@@ -129,6 +129,31 @@ def main():
 
     raw_matches = fetch_matches(api_key)
 
+    print("----- API DATA DIAGNOSTIC -----")
+    print(f"Total received: {len(raw_matches)}")
+
+    league_names = sorted({
+        str(m.get("league_name", "UNKNOWN"))
+        for m in raw_matches
+    })
+
+    print("LEAGUES RETURNED BY API:")
+    for name in league_names:
+        print(f"- {name}")
+
+    print("SAMPLE MATCHES:")
+    for match in raw_matches[:5]:
+        print({
+            "league_name": match.get("league_name"),
+            "status": match.get("status"),
+            "status_code": match.get("status_code"),
+            "start_at": match.get("start_at"),
+            "home": match.get("home_team"),
+            "away": match.get("away_team")
+        })
+
+    print("----- END DIAGNOSTIC -----")
+
     try:
         streams_data = load_json(STREAMS_FILE)
     except FileNotFoundError:
