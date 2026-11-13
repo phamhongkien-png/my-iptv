@@ -1,4 +1,12 @@
 
+import json
+import os
+import sys
+import urllib.parse
+import urllib.request
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
 def main():
     api_key = os.environ.get("SPORTSTATS_API_KEY")
 
