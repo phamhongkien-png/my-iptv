@@ -117,6 +117,7 @@ def main():
         "asian games",
         "avc champions league",
         "vietnam"
+        "spain"
     ]
 
     print("\n----- TARGET VOLLEYBALL LEAGUES -----")
