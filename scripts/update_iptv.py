@@ -57,13 +57,14 @@ def main():
         indent=2
     ))
 
-    keywords = [
-        "premier league",
-        "champions league",
-        "la liga",
-        "v.league",
-        "vietnam"
-    ]
+keywords = [
+    "premier league",
+    "champions league",
+    "la liga",
+    "v.league",
+    "vietnam",
+    "spain"
+]
 
     print("\n----- TARGET SOCCER LEAGUES -----")
 
